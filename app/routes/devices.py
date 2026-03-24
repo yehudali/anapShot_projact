@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from app.models import DeviceState, Location
 from app.services.database import devices_collection, locations_collection, redis_client
+from app.core.auth import require_role
 from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
+from uuid import uuid4
 import json
 
 router = APIRouter()
@@ -35,7 +37,7 @@ def _valid_oid(id_str: str) -> ObjectId:
 # --- Device CRUD ---
 
 @router.get("/devices", response_model=dict)
-async def list_devices(state: Optional[DeviceState] = None):
+async def list_devices(state: Optional[DeviceState] = None, _=Depends(require_role("admin", "manager"))):
     query = {}
     if state:
         query["state"] = state.value
@@ -45,17 +47,18 @@ async def list_devices(state: Optional[DeviceState] = None):
 
 
 @router.post("/devices", response_model=dict)
-async def create_device(body: DeviceCreate):
+async def create_device(body: DeviceCreate, _=Depends(require_role("admin"))):
     doc = body.model_dump()
     doc["_id"] = ObjectId()
+    doc["api_key"] = str(uuid4())
     from datetime import datetime, timezone
     doc["created_at"] = datetime.now(timezone.utc)
     await devices_collection.insert_one(doc)
-    return {"status": "success", "data": {"id": str(doc["_id"])}}
+    return {"status": "success", "data": {"id": str(doc["_id"]), "api_key": doc["api_key"]}}
 
 
 @router.get("/devices/{device_id}", response_model=dict)
-async def get_device(device_id: str):
+async def get_device(device_id: str, _=Depends(require_role("admin", "manager"))):
     device = await devices_collection.find_one({"_id": _valid_oid(device_id)})
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -63,7 +66,7 @@ async def get_device(device_id: str):
 
 
 @router.put("/devices/{device_id}", response_model=dict)
-async def update_device(device_id: str, body: DeviceUpdate):
+async def update_device(device_id: str, body: DeviceUpdate, _=Depends(require_role("admin"))):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -76,7 +79,7 @@ async def update_device(device_id: str, body: DeviceUpdate):
 
 
 @router.delete("/devices/{device_id}", response_model=dict)
-async def delete_device(device_id: str):
+async def delete_device(device_id: str, _=Depends(require_role("admin"))):
     result = await devices_collection.delete_one({"_id": _valid_oid(device_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -86,10 +89,13 @@ async def delete_device(device_id: str):
 # --- Location reporting (existing) ---
 
 @router.post("/devices/{device_id}/location", response_model=dict)
-async def report_location(device_id: str, location: Location):
+async def report_location(device_id: str, location: Location, x_api_key: str = Header(...)):
     device = await devices_collection.find_one({"_id": _valid_oid(device_id)})
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+
+    if device.get("api_key") != x_api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
     if device.get("state") != "active":
         raise HTTPException(status_code=400, detail="Device is not active")

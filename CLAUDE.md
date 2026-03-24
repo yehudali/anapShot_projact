@@ -48,5 +48,5 @@ live GPS locations, and streams them in real-time until the event closes.
 - [x] Step 2: Data models
 - [x] Step 3: Basic endpoints (events, devices, locations)
 - [x] Step 4: Kafka wake-up flow
-- [ ] Step 5: WebSocket live streaming
-- [ ] Step 6: JWT authentication
+- [x] Step 5: WebSocket live streaming
+- [x] Step 6: JWT authentication

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.models import Event, EventStatus
-from app.services.database import events_collection
+from app.services.database import events_collection, redis_client
 from app.services.kafka_service import send_wakeup_message
+from app.core.auth import require_role
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional
@@ -22,8 +23,8 @@ def _valid_oid(id_str: str) -> ObjectId:
 
 
 @router.post("/events", response_model=dict)
-async def create_event(event: Event):
-    event.created_by = "admin"  # TODO: get from auth
+async def create_event(event: Event, user: dict = Depends(require_role("admin"))):
+    event.created_by = user.get("sub", "admin")
     event_dict = event.model_dump(by_alias=True, exclude_unset=True)
     event_dict["_id"] = ObjectId()
 
@@ -36,7 +37,7 @@ async def create_event(event: Event):
 
 
 @router.get("/events", response_model=dict)
-async def list_events(status: Optional[EventStatus] = None):
+async def list_events(status: Optional[EventStatus] = None, _=Depends(require_role("admin", "manager"))):
     query = {}
     if status:
         query["status"] = status.value
@@ -46,7 +47,7 @@ async def list_events(status: Optional[EventStatus] = None):
 
 
 @router.get("/events/{event_id}", response_model=dict)
-async def get_event(event_id: str):
+async def get_event(event_id: str, _=Depends(require_role("admin", "manager"))):
     event = await events_collection.find_one({"_id": _valid_oid(event_id)})
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -54,11 +55,12 @@ async def get_event(event_id: str):
 
 
 @router.put("/events/{event_id}/close", response_model=dict)
-async def close_event(event_id: str):
+async def close_event(event_id: str, _=Depends(require_role("admin"))):
     result = await events_collection.update_one(
         {"_id": _valid_oid(event_id)},
         {"$set": {"status": EventStatus.CLOSED.value, "closed_at": datetime.now(timezone.utc)}},
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Event not found")
+    await redis_client.delete(f"event:{event_id}")
     return {"status": "success", "message": "Event closed"}

@@ -44,9 +44,9 @@ live GPS locations, and streams them in real-time until the event closes.
 - Always return consistent JSON responses with status field
 
 ## Project Status
-- [ ] Step 1: Project skeleton + Docker
-- [ ] Step 2: Data models
-- [ ] Step 3: Basic endpoints (events, devices, locations)
-- [ ] Step 4: Kafka wake-up flow
+- [x] Step 1: Project skeleton + Docker
+- [x] Step 2: Data models
+- [x] Step 3: Basic endpoints (events, devices, locations)
+- [x] Step 4: Kafka wake-up flow
 - [ ] Step 5: WebSocket live streaming
 - [ ] Step 6: JWT authentication

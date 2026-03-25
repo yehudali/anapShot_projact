@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>AnapShot — מכשיר</title>
+  <style>
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --border: #334155;
+      --text: #f1f5f9; --muted: #94a3b8;
+      --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --yellow: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100dvh; display: flex; flex-direction: column;
+      align-items: center; padding: 24px 16px;
+    }
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; color: var(--blue); }
+    .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 28px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px;
+      width: 100%; max-width: 420px; margin-bottom: 14px;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); padding: 10px 12px;
+      font-size: 0.85rem; margin-bottom: 14px; font-family: monospace;
+    }
+    input:focus { outline: 2px solid var(--blue); border-color: var(--blue); }
+    button {
+      width: 100%; padding: 12px; border-radius: 8px; border: none;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    button:active { opacity: 0.7; }
+    .btn-primary { background: var(--blue); color: white; }
+    .btn-green { background: var(--green); color: white; }
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); margin-top: 8px; font-size: 0.85rem; padding: 8px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-left: 6px; }
+    .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.5s infinite; }
+    .dot-yellow { background: var(--yellow); }
+    .dot-red { background: var(--red); }
+    .dot-gray { background: var(--border); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .status-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.82rem; padding: 7px 0; border-bottom: 1px solid var(--border);
+    }
+    .status-row:last-child { border-bottom: none; }
+    .status-label { color: var(--muted); }
+    .hidden { display: none !important; }
+    #gps-coords { font-family: monospace; font-size: 0.78rem; color: var(--muted); text-align: center; margin-bottom: 8px; }
+    .warning {
+      background: rgba(245,158,11,.1); border: 1px solid var(--yellow);
+      border-radius: 8px; padding: 12px; font-size: 0.8rem; color: var(--yellow);
+      max-width: 420px; width: 100%; margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Setup Screen -->
+  <div id="screen-setup">
+    <h1>AnapShot</h1>
+    <p class="subtitle">הגדרת מכשיר שידור מיקום</p>
+    <div class="card">
+      <label>Device ID</label>
+      <input id="inp-device-id" type="text" placeholder="מזהה המכשיר מהמערכת" autocomplete="off" spellcheck="false">
+      <label>API Key</label>
+      <input id="inp-api-key" type="text" placeholder="מפתח ה-API של המכשיר" autocomplete="off" spellcheck="false">
+      <button class="btn-primary" onclick="saveSetup()">שמור והתחל</button>
+    </div>
+  </div>
+
+  <!-- Main Screen -->
+  <div id="screen-main" class="hidden">
+    <h1>AnapShot</h1>
+    <p class="subtitle" id="device-label"></p>
+
+    <div class="card">
+      <div class="status-row">
+        <span class="status-label">חיבור לשרת</span>
+        <span id="status-server"><span class="status-dot dot-gray"></span> בדיקה...</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">התראות Push</span>
+        <span id="status-push"><span class="status-dot dot-gray"></span> לא הוגדרו</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">GPS</span>
+        <span id="status-gps"><span class="status-dot dot-gray"></span> לא פעיל</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">מצב</span>
+        <span id="status-mode"><span class="status-dot dot-yellow"></span> ממתין לאירוע</span>
+      </div>
+    </div>
+
+    <div id="gps-coords" class="hidden"></div>
+
+    <div class="card" id="card-subscribe">
+      <p style="font-size:.82rem;margin-bottom:12px;">כדי לקבל התראה כשנפתח אירוע יש לאפשר התראות:</p>
+      <button class="btn-green" onclick="subscribePush()">🔔 אפשר התראות Push</button>
+    </div>
+
+    <div class="warning">
+      ⚠️ יש להשאיר את המסך דלוק ואת האפליקציה פתוחה בזמן שידור מיקום.
+    </div>
+
+    <button class="btn-danger" onclick="resetSetup()">אפס הגדרות מכשיר</button>
+  </div>
+
+  <script>
+    const API = `${location.origin}/api/v1`;
+    let deviceId, apiKey, currentEventId, gpsInterval, swReg;
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    window.addEventListener('load', async () => {
+      deviceId = localStorage.getItem('device_id');
+      apiKey   = localStorage.getItem('api_key');
+      if (!deviceId || !apiKey) { showScreen('setup'); return; }
+
+      showScreen('main');
+      document.getElementById('device-label').textContent = `מכשיר: ${deviceId.slice(-8)}`;
+      swReg = await initSW();
+      checkServer();
+      checkPushStatus();
+
+      // Opened via notification click with ?event_id=...
+      const eventId = new URLSearchParams(location.search).get('event_id');
+      if (eventId) startReporting(eventId);
+    });
+
+    // ── Setup ─────────────────────────────────────────────────────────────
+    function saveSetup() {
+      const id  = document.getElementById('inp-device-id').value.trim();
+      const key = document.getElementById('inp-api-key').value.trim();
+      if (!id || !key) { alert('יש למלא את שני השדות'); return; }
+      localStorage.setItem('device_id', id);
+      localStorage.setItem('api_key', key);
+      location.reload();
+    }
+
+    function resetSetup() {
+      if (!confirm('לאפס את הגדרות המכשיר?')) return;
+      stopReporting();
+      localStorage.clear();
+      location.reload();
+    }
+
+    // ── Service Worker ────────────────────────────────────────────────────
+    async function initSW() {
+      if (!('serviceWorker' in navigator)) return null;
+      try {
+        const reg = await navigator.serviceWorker.register('/device-app/sw.js', { scope: '/device-app/' });
+        navigator.serviceWorker.addEventListener('message', (e) => {
+          if (e.data?.type === 'EVENT_STARTED') startReporting(e.data.event_id);
+        });
+        return reg;
+      } catch (err) { console.error('SW register failed:', err); return null; }
+    }
+
+    // ── Push Subscribe ────────────────────────────────────────────────────
+    async function subscribePush() {
+      if (!('Notification' in window) || !('PushManager' in window)) {
+        alert('הדפדפן אינו תומך ב-Push notifications'); return;
+      }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('יש לאפשר התראות'); return; }
+
+      try {
+        const res  = await fetch(`${API}/vapid-public-key`);
+        const { data } = await res.json();
+        if (!data.public_key) { alert('Push לא מוגדר בשרת (חסרים VAPID keys)'); return; }
+
+        const reg = swReg || await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8(data.public_key),
+        });
+
+        await fetch(`${API}/devices/${deviceId}/push-subscription`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+          body: JSON.stringify(sub.toJSON()),
+        });
+        checkPushStatus();
+      } catch (err) { console.error(err); alert(`שגיאה: ${err.message}`); }
+    }
+
+    function checkPushStatus() {
+      if (!('PushManager' in window)) return;
+      navigator.serviceWorker.ready.then(reg =>
+        reg.pushManager.getSubscription().then(sub => {
+          const el = document.getElementById('status-push');
+          if (sub) {
+            el.innerHTML = dot('green') + ' פעיל';
+            document.getElementById('card-subscribe').classList.add('hidden');
+          } else {
+            el.innerHTML = dot('yellow') + ' לא רשום';
+          }
+        })
+      );
+    }
+
+    // ── GPS Reporting ─────────────────────────────────────────────────────
+    function startReporting(eventId) {
+      if (gpsInterval) return;
+      currentEventId = eventId;
+      setStatus('mode', 'green', `משדר — ${eventId.slice(-6)}`);
+      setStatus('gps', 'green', 'פעיל');
+
+      sendGps();
+      gpsInterval = setInterval(sendGps, 5000);
+    }
+
+    function stopReporting() {
+      clearInterval(gpsInterval); gpsInterval = null; currentEventId = null;
+      setStatus('mode', 'yellow', 'ממתין לאירוע');
+      setStatus('gps', 'gray', 'לא פעיל');
+      document.getElementById('gps-coords').classList.add('hidden');
+    }
+
+    function sendGps() {
+      navigator.geolocation.getCurrentPosition(
+        pos => reportLocation(pos),
+        err => { console.warn('GPS:', err); setStatus('gps', 'yellow', 'שגיאת GPS'); },
+        { enableHighAccuracy: true, timeout: 4500, maximumAge: 0 }
+      );
+    }
+
+    async function reportLocation(pos) {
+      const { latitude, longitude, accuracy } = pos.coords;
+      document.getElementById('gps-coords').classList.remove('hidden');
+      document.getElementById('gps-coords').textContent =
+        `${latitude.toFixed(5)}, ${longitude.toFixed(5)}  ±${Math.round(accuracy)}m`;
+
+      try {
+        const r = await fetch(`${API}/devices/${deviceId}/location`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+          body: JSON.stringify({
+            device_id: deviceId, event_id: currentEventId,
+            latitude, longitude, accuracy,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+        if (r.status === 400) { stopReporting(); } // event closed
+        setStatus('server', 'green', 'מחובר');
+      } catch { setStatus('server', 'red', 'שגיאת חיבור'); }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    async function checkServer() {
+      try {
+        const r = await fetch(`${location.origin}/health`);
+        setStatus('server', r.ok ? 'green' : 'red', r.ok ? 'מחובר' : 'שגיאה');
+      } catch { setStatus('server', 'red', 'לא מחובר'); }
+    }
+
+    function setStatus(id, color, text) {
+      document.getElementById(`status-${id}`).innerHTML = dot(color) + ' ' + text;
+    }
+    function dot(color) { return `<span class="status-dot dot-${color}"></span>`; }
+    function showScreen(name) {
+      document.getElementById('screen-setup').classList.toggle('hidden', name !== 'setup');
+      document.getElementById('screen-main').classList.toggle('hidden', name !== 'main');
+    }
+    function urlB64ToUint8(b64) {
+      const pad = '='.repeat((4 - b64.length % 4) % 4);
+      const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+  </script>
+</body>
+</html>

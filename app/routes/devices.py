@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from app.models import DeviceState, Location
 from app.services.database import devices_collection, locations_collection, redis_client
 from app.core.auth import require_role
+from app.config import Settings
 from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 from uuid import uuid4
 from datetime import datetime, timezone
 import json
+
+settings = Settings()
 
 router = APIRouter()
 
@@ -84,6 +87,36 @@ async def delete_device(device_id: str, _=Depends(require_role("admin"))):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Device not found")
     return {"status": "success", "message": "Device deleted"}
+
+
+# --- VAPID public key (no auth — needed by device PWA before setup) ---
+
+@router.get("/vapid-public-key", response_model=dict)
+async def get_vapid_public_key():
+    """Return the VAPID public key so the device PWA can subscribe to Web Push."""
+    return {"status": "success", "data": {"public_key": settings.vapid_public_key or ""}}
+
+
+# --- Push subscription registration ---
+
+@router.put("/devices/{device_id}/push-subscription", response_model=dict)
+async def register_push_subscription(
+    device_id: str,
+    body: dict,
+    x_api_key: str = Header(...),
+):
+    """Store a Web Push subscription for this device. Auth via X-Api-Key."""
+    device = await devices_collection.find_one({"_id": _valid_oid(device_id)})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.get("api_key") != x_api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    await devices_collection.update_one(
+        {"_id": _valid_oid(device_id)},
+        {"$set": {"push_subscription": body}},
+    )
+    return {"status": "success", "message": "Push subscription registered"}
 
 
 # --- Location reporting (existing) ---

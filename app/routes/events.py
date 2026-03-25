@@ -1,7 +1,10 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from app.models import Event, EventStatus
 from app.services.database import events_collection, redis_client
 from app.services.kafka_service import send_wakeup_message
+from app.services import push_service
 from app.core.auth import require_role
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -32,6 +35,7 @@ async def create_event(event: Event, user: dict = Depends(require_role("admin"))
     event_id = str(result.inserted_id)
 
     await send_wakeup_message(event_id)
+    asyncio.create_task(push_service.send_event_notification(event_id, event.name))
 
     return {"status": "success", "data": {"event_id": event_id}, "message": "Event created and devices notified"}
 

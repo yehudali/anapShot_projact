@@ -42,6 +42,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
   consumer:
     build: ./consumer
+    profiles: [dev]
     depends_on:
       - kafka
       - fastapi

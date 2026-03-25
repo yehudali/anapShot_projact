@@ -15,9 +15,9 @@ spec:
       containers:
         - name: frontend
           # Replace with your Docker Hub image after: docker build + docker push
-          image: docker.io/yehudalinker/anashot-frontend:latest
+          image: docker.io/yehudalinker/anashot-frontend:v1
           ports:
-            - containerPort: 5173
+            - containerPort: 8080
           env:
             - name: API_HOST
               value: "fastapi-service"

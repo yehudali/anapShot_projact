@@ -68,7 +68,7 @@ def test_device_crud():
     # Create
     r = httpx.post(
         f"{BASE}/api/v1/devices",
-        json={"name": "smoke-test-device"},
+        json={"name": "smoke-test-device", "user_id": "smoke-test"},
         headers=h,
         timeout=10,
     )
@@ -109,7 +109,7 @@ def test_event_create_and_close():
     # Create event
     r = httpx.post(
         f"{BASE}/api/v1/events",
-        json={"name": "smoke-test-event"},
+        json={"name": "smoke-test-event", "created_by": "smoke-test"},
         headers=h,
         timeout=10,
     )
@@ -135,7 +135,7 @@ def test_live_locations_endpoint():
     h = {"Authorization": f"Bearer {token}"}
 
     # Create and immediately close an event (no devices, empty locations)
-    r = httpx.post(f"{BASE}/api/v1/events", json={"name": "loc-test"}, headers=h, timeout=10)
+    r = httpx.post(f"{BASE}/api/v1/events", json={"name": "loc-test", "created_by": "smoke-test"}, headers=h, timeout=10)
     assert r.status_code == 200
     event_id = r.json()["data"]["event_id"]
 

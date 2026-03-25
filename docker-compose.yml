@@ -51,6 +51,14 @@ services:
       - CONSUMER_USERNAME=consumer-service
       - CONSUMER_PASSWORD=consumer123
     restart: on-failure
+  frontend:
+    build: ./frontend
+    ports:
+      - '5173:5173'
+    depends_on:
+      - fastapi
+    environment:
+      - API_HOST=fastapi
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     depends_on:

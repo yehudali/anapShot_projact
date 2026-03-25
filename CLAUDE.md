@@ -17,10 +17,12 @@ live GPS locations, and streams them in real-time until the event closes.
 
 ## Architecture Flow
 1. POST /events → create event → publish to Kafka topic `device.wakeup`
-2. Each device consumes Kafka → wakes up → POST /devices/{id}/location
-3. Location saved to Redis (live) + MongoDB (history)
-4. WebSocket /ws/events/{event_id} → streams live locations to frontend
-5. On event close → stop streaming, mark final snapshot
+2. `consumer` service consumes Kafka → simulates active devices → POST /devices/{id}/location
+   (in production: real devices would report directly)
+3. Location saved to Redis HSET `event:{id}` → `device_id: json` (live, one entry per device)
+   + MongoDB `locations` collection (full history)
+4. WebSocket /ws/events/{event_id} → streams live locations to frontend every 2s
+5. On event close → stop streaming, delete Redis key
 
 ## Device States
 - ACTIVE — participates in events, receives wake-up
@@ -31,6 +33,16 @@ live GPS locations, and streams them in real-time until the event closes.
 - ADMIN — full access, creates events, manages devices
 - MANAGER — read access to map and events
 - DEVICE — only reports location (no UI access)
+
+## Device Location Auth
+- Location report (`POST /devices/{id}/location`) uses `X-Api-Key` header (not Bearer token)
+- Each device has a unique `api_key` generated on creation
+- All other endpoints use `Authorization: Bearer <token>`
+
+## First-Time Setup (after docker compose up)
+1. `POST /api/v1/auth/bootstrap` — create first admin user
+2. `POST /api/v1/users` — create `consumer-service` account (role: manager, password: consumer123)
+   Without this account the consumer service cannot authenticate and no locations will be reported
 
 ## Location Report Minimum Fields
 - device_id, event_id, latitude, longitude, timestamp, accuracy

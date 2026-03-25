@@ -25,7 +25,7 @@ def _valid_oid(id_str: str) -> ObjectId:
 @router.post("/events", response_model=dict)
 async def create_event(event: Event, user: dict = Depends(require_role("admin"))):
     event.created_by = user.get("sub", "admin")
-    event_dict = event.model_dump(by_alias=True, exclude_unset=True)
+    event_dict = event.model_dump(by_alias=True, exclude_none=True)
     event_dict["_id"] = ObjectId()
 
     result = await events_collection.insert_one(event_dict)

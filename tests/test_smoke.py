@@ -2,22 +2,28 @@
 Smoke tests — run against a live Docker stack.
   docker compose up --build -d
   pytest tests/
+
+If you bootstrapped with non-default credentials, pass them via env vars:
+  TEST_ADMIN_USER=youradmin TEST_ADMIN_PASS=yourpass pytest tests/
 """
+import os
+
 import httpx
-import pytest
 
 BASE = "http://localhost:8000"
+ADMIN_USER = os.getenv("TEST_ADMIN_USER", "testadmin")
+ADMIN_PASS = os.getenv("TEST_ADMIN_PASS", "test123")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _bootstrap_or_login(username: str = "testadmin", password: str = "test123") -> str:
+def _bootstrap_or_login() -> str:
     """Bootstrap first admin if DB is empty, then login and return token."""
     r = httpx.post(
         f"{BASE}/api/v1/auth/bootstrap",
-        json={"username": username, "password": password},
+        json={"username": ADMIN_USER, "password": ADMIN_PASS},
         timeout=10,
     )
     # 200 = bootstrapped now, 409 = already exists — both are fine
@@ -25,10 +31,13 @@ def _bootstrap_or_login(username: str = "testadmin", password: str = "test123") 
 
     r = httpx.post(
         f"{BASE}/api/v1/auth/login",
-        json={"username": username, "password": password},
+        json={"username": ADMIN_USER, "password": ADMIN_PASS},
         timeout=10,
     )
-    assert r.status_code == 200, f"Login failed: {r.text}"
+    assert r.status_code == 200, (
+        f"Login failed — if you used custom credentials, set "
+        f"TEST_ADMIN_USER / TEST_ADMIN_PASS env vars. Response: {r.text}"
+    )
     return r.json()["data"]["token"]
 
 

@@ -11,7 +11,7 @@ class Event(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
     name: str
     description: Optional[str] = None
-    created_by: str  # user_id
+    created_by: str = ""
     status: EventStatus = EventStatus.ACTIVE
     created_at: datetime = Field(default_factory=datetime.utcnow)
     closed_at: Optional[datetime] = None

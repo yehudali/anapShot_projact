@@ -15,7 +15,7 @@ spec:
       containers:
         - name: fastapi
           # Replace with your Docker Hub image after: docker build + docker push
-          image: docker.io/<your-dockerhub-username>/anashot-backend:latest
+          image: docker.io/yehudalinker/anashot-backend:latest
           ports:
             - containerPort: 8000
           envFrom:

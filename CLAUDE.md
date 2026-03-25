@@ -42,6 +42,7 @@ live GPS locations, and streams them in real-time until the event closes.
 - Environment variables only via config.py (never hardcode)
 - Each new feature in its own file under routes/ or services/
 - Always return consistent JSON responses with status field
+- API contracts are frozen: never change existing endpoint paths, methods, or response shapes
 
 ## Project Status
 - [x] Step 1: Project skeleton + Docker

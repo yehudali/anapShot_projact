@@ -5,11 +5,9 @@ from app.services.database import users_collection
 from bson import ObjectId
 from pydantic import BaseModel
 from datetime import datetime, timezone
-from passlib.context import CryptContext
+from app.core.auth import pwd_ctx as _pwd_ctx
 
 router = APIRouter()
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class UserCreate(BaseModel):

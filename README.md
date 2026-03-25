@@ -143,7 +143,8 @@ curl http://localhost:8000/api/v1/devices \
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | POST | `/api/v1/auth/login` | Login → JWT token | None |
-| POST | `/api/v1/users/bootstrap` | Create first admin | None (locked after first user) |
+| POST | `/api/v1/auth/bootstrap` | Create first admin → returns JWT token | None (locked after first user) |
+| POST | `/api/v1/users/bootstrap` | Create first admin (no token returned) | None (locked after first user) |
 
 ### Users
 | Method | Path | Description | Auth |
@@ -173,7 +174,8 @@ curl http://localhost:8000/api/v1/devices \
 ### Locations
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| GET | `/api/v1/events/{id}/locations` | Live locations (Redis) | None |
+| GET | `/api/v1/events/{id}/locations` | Live locations (Redis) | ADMIN, MANAGER |
+| GET | `/api/v1/events/{id}/history` | Full location history (MongoDB, paginated) | ADMIN, MANAGER |
 
 ### WebSocket
 | Path | Description | Auth |

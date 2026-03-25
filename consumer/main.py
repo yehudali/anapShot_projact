@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+from datetime import datetime, timezone
 
 import httpx
 from aiokafka import AIOKafkaConsumer
@@ -12,6 +13,8 @@ log = logging.getLogger(__name__)
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
+CONSUMER_USERNAME = os.getenv("CONSUMER_USERNAME", "")
+CONSUMER_PASSWORD = os.getenv("CONSUMER_PASSWORD", "")
 LOCATION_INTERVAL = 5  # seconds between location reports
 
 # Base coordinates (Israel center)
@@ -28,13 +31,32 @@ def _simulate_location(base_lat: float, base_lon: float) -> dict:
     }
 
 
-async def report_device_location(client: httpx.AsyncClient, device_id: str, event_id: str):
+async def _login(client: httpx.AsyncClient) -> str:
+    """Login to FastAPI and return a Bearer token."""
+    resp = await client.post(
+        f"{FASTAPI_URL}/api/v1/auth/login",
+        json={"username": CONSUMER_USERNAME, "password": CONSUMER_PASSWORD},
+    )
+    resp.raise_for_status()
+    return resp.json()["data"]["token"]
+
+
+async def report_device_location(
+    client: httpx.AsyncClient,
+    device_id: str,
+    api_key: str,
+    event_id: str,
+    auth_headers: dict,
+):
     """Periodically report location for a single device until the event closes."""
     log.info(f"Device {device_id}: starting location reporting for event {event_id}")
     while True:
         try:
             # Check if event is still active
-            resp = await client.get(f"{FASTAPI_URL}/api/v1/events/{event_id}")
+            resp = await client.get(
+                f"{FASTAPI_URL}/api/v1/events/{event_id}",
+                headers=auth_headers,
+            )
             if resp.status_code == 200:
                 data = resp.json().get("data", {})
                 if data.get("status") == "closed":
@@ -45,11 +67,12 @@ async def report_device_location(client: httpx.AsyncClient, device_id: str, even
             location = _simulate_location(BASE_LAT, BASE_LON)
             location["device_id"] = device_id
             location["event_id"] = event_id
-            location["timestamp"] = asyncio.get_event_loop().time()
+            location["timestamp"] = datetime.now(timezone.utc).isoformat()
 
             await client.post(
                 f"{FASTAPI_URL}/api/v1/devices/{device_id}/location",
                 json=location,
+                headers={"X-Api-Key": api_key},
             )
         except Exception as exc:
             log.warning(f"Device {device_id}: error reporting location — {exc}")
@@ -61,7 +84,19 @@ async def handle_wakeup(event_id: str):
     """Fetch all active devices and start location reporting tasks."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            resp = await client.get(f"{FASTAPI_URL}/api/v1/devices", params={"state": "active"})
+            token = await _login(client)
+        except Exception as exc:
+            log.error(f"Consumer login failed: {exc}")
+            return
+
+        auth_headers = {"Authorization": f"Bearer {token}"}
+
+        try:
+            resp = await client.get(
+                f"{FASTAPI_URL}/api/v1/devices",
+                params={"state": "active"},
+                headers=auth_headers,
+            )
             resp.raise_for_status()
         except Exception as exc:
             log.error(f"Failed to fetch active devices: {exc}")
@@ -74,7 +109,9 @@ async def handle_wakeup(event_id: str):
 
         log.info(f"Waking up {len(devices)} device(s) for event {event_id}")
         tasks = [
-            asyncio.create_task(report_device_location(client, d["id"], event_id))
+            asyncio.create_task(
+                report_device_location(client, d["id"], d.get("api_key", ""), event_id, auth_headers)
+            )
             for d in devices
         ]
         await asyncio.gather(*tasks)

@@ -121,7 +121,15 @@ curl -X POST http://localhost:8000/api/v1/users/bootstrap \
   -d '{"username": "admin", "password": "yourpassword", "role": "admin"}'
 ```
 
-**2. Login to get a token:**
+**2. Create the consumer service account** (needed for the device simulator):
+```bash
+curl -X POST http://localhost:8000/api/v1/users \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin-token>" \
+  -d '{"username": "consumer-service", "password": "consumer123", "role": "manager"}'
+```
+
+**3. Login to get a token:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
@@ -129,7 +137,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 # → {"token": "eyJ..."}
 ```
 
-**3. Use the token in all subsequent requests:**
+**4. Use the token in all subsequent requests:**
 ```bash
 curl http://localhost:8000/api/v1/devices \
   -H "Authorization: Bearer eyJ..."

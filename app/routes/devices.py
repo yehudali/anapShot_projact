@@ -6,6 +6,7 @@ from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 from uuid import uuid4
+from datetime import datetime, timezone
 import json
 
 router = APIRouter()
@@ -48,10 +49,9 @@ async def list_devices(state: Optional[DeviceState] = None, _=Depends(require_ro
 
 @router.post("/devices", response_model=dict)
 async def create_device(body: DeviceCreate, _=Depends(require_role("admin"))):
-    doc = body.model_dump()
+    doc = {k: v.value if hasattr(v, "value") else v for k, v in body.model_dump().items()}
     doc["_id"] = ObjectId()
     doc["api_key"] = str(uuid4())
-    from datetime import datetime, timezone
     doc["created_at"] = datetime.now(timezone.utc)
     await devices_collection.insert_one(doc)
     return {"status": "success", "data": {"id": str(doc["_id"]), "api_key": doc["api_key"]}}
@@ -67,7 +67,7 @@ async def get_device(device_id: str, _=Depends(require_role("admin", "manager"))
 
 @router.put("/devices/{device_id}", response_model=dict)
 async def update_device(device_id: str, body: DeviceUpdate, _=Depends(require_role("admin"))):
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = {k: v.value if hasattr(v, "value") else v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
     result = await devices_collection.update_one(
@@ -112,6 +112,11 @@ async def report_location(device_id: str, location: Location, x_api_key: str = H
         "timestamp": location.timestamp.isoformat(),
         "accuracy": location.accuracy,
     }
-    await redis_client.sadd(redis_key, json.dumps(location_data))
+    await redis_client.hset(redis_key, device_id, json.dumps(location_data))
+    await redis_client.setex(f"device:alive:{device_id}", 45, "1")
+    await devices_collection.update_one(
+        {"_id": _valid_oid(device_id)},
+        {"$set": {"last_seen": datetime.now(timezone.utc)}}
+    )
 
     return {"status": "success", "message": "Location reported"}

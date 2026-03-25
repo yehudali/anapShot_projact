@@ -20,8 +20,8 @@ def _valid_oid(id_str: str) -> ObjectId | None:
 
 
 async def _get_locations(event_id: str) -> list:
-    raw = await redis_client.smembers(f"event:{event_id}")
-    return [json.loads(item) for item in raw]
+    raw = await redis_client.hgetall(f"event:{event_id}")
+    return [json.loads(v) for v in raw.values()]
 
 
 @router.websocket("/events/{event_id}")

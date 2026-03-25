@@ -14,6 +14,7 @@ class Device(BaseModel):
     state: DeviceState = DeviceState.ACTIVE
     user_id: str  # who owns this device
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_seen: Optional[datetime] = None
 
     class Config:
         allow_population_by_field_name = True

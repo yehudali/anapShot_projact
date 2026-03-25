@@ -1,0 +1,14 @@
+# OpenShift Route — provides automatic HTTPS
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: frontend-route
+spec:
+  to:
+    kind: Service
+    name: frontend-service
+  port:
+    targetPort: 5173
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

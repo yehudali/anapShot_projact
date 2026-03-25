@@ -1,0 +1,14 @@
+# OpenShift Route — provides automatic HTTPS (required for Push notifications)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: fastapi-route
+spec:
+  to:
+    kind: Service
+    name: fastapi-service
+  port:
+    targetPort: 8000
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

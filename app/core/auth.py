@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from fastapi import Depends, HTTPException, Header
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -27,11 +28,11 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
-async def get_current_user(authorization: str = Header(...)) -> dict:
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header must be 'Bearer <token>'")
-    token = authorization[len("Bearer "):]
-    return decode_token(token)
+_bearer = HTTPBearer()
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(_bearer)) -> dict:
+    return decode_token(credentials.credentials)
 
 
 def require_role(*roles: str) -> Callable:

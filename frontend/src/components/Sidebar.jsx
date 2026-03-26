@@ -43,10 +43,13 @@ export default function Sidebar({ locations, connectionStatus, eventStatus, onDe
           locations.map((loc) => (
             <div
               key={loc.device_id}
-              className="sidebar-item"
+              className={`sidebar-item${loc.state === 'unreachable' ? ' sidebar-item--unreachable' : ''}`}
               onClick={() => onDeviceClick(loc)}
             >
-              <div className="sidebar-item-name">{loc.device_id}</div>
+              <div className="sidebar-item-name">
+                {loc.device_name || loc.device_id}
+                {loc.state === 'unreachable' && <span className="unreachable-badge">!</span>}
+              </div>
               <div className="sidebar-item-meta">
                 <span>Accuracy: {loc.accuracy}m</span>
                 <span>{timeAgo(loc.timestamp)}</span>

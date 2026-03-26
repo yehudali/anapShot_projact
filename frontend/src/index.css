@@ -252,6 +252,12 @@ body {
   font-size: 1.5rem;
 }
 
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .page-loading {
   display: flex;
   align-items: center;
@@ -505,6 +511,25 @@ tbody tr:hover {
   justify-content: space-between;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+.sidebar-item--unreachable {
+  border-left: 3px solid var(--danger);
+}
+
+.unreachable-badge {
+  display: inline-block;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 .sidebar-footer {

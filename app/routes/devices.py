@@ -130,7 +130,8 @@ async def report_location(device_id: str, location: Location, x_api_key: str = H
     if device.get("api_key") != x_api_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    if device.get("state") != "active":
+    device_state = device.get("state")
+    if device_state not in ("active", "unreachable"):
         raise HTTPException(status_code=400, detail="Device is not active")
 
     location_dict = location.model_dump(by_alias=True, exclude_unset=True)
@@ -140,6 +141,8 @@ async def report_location(device_id: str, location: Location, x_api_key: str = H
     redis_key = f"event:{location.event_id}"
     location_data = {
         "device_id": device_id,
+        "device_name": device.get("name", device_id),
+        "state": "active",
         "latitude": location.latitude,
         "longitude": location.longitude,
         "timestamp": location.timestamp.isoformat(),
@@ -147,9 +150,13 @@ async def report_location(device_id: str, location: Location, x_api_key: str = H
     }
     await redis_client.hset(redis_key, device_id, json.dumps(location_data))
     await redis_client.setex(f"device:alive:{device_id}", 45, "1")
+
+    db_updates: dict = {"last_seen": datetime.now(timezone.utc)}
+    if device_state == "unreachable":
+        db_updates["state"] = "active"
     await devices_collection.update_one(
         {"_id": _valid_oid(device_id)},
-        {"$set": {"last_seen": datetime.now(timezone.utc)}}
+        {"$set": db_updates}
     )
 
     return {"status": "success", "message": "Location reported"}

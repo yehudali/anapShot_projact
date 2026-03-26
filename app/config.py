@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     vapid_private_key: Optional[str] = None  # base64url-encoded EC private key
     vapid_public_key: Optional[str] = None   # base64url-encoded EC public key (sent to browsers)
     vapid_claims_email: Optional[str] = None # e.g. admin@example.com
+    # Consumer service credentials — must match CONSUMER_USERNAME/CONSUMER_PASSWORD in consumer env
+    consumer_username: str = 'consumer-service'
+    consumer_password: str = 'consumer123'
 
     class Config:
         env_file = '.env'

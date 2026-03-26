@@ -61,6 +61,18 @@ export default function Devices() {
     }
   };
 
+  const handleActivateAll = async () => {
+    const inactive = devices.filter((d) => d.state !== 'active');
+    if (inactive.length === 0) return;
+    setError('');
+    try {
+      await Promise.all(inactive.map((d) => updateDevice(d.id, { state: 'active' })));
+      await fetchDevices();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to activate devices');
+    }
+  };
+
   const handleDelete = async (deviceId) => {
     if (!window.confirm('Are you sure you want to delete this device?')) return;
     try {
@@ -100,9 +112,14 @@ export default function Devices() {
       <div className="page-header">
         <h2>Devices</h2>
         {isAdmin && (
-          <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? 'Cancel' : '+ Create Device'}
-          </button>
+          <div className="page-header-actions">
+            <button className="btn btn-secondary" onClick={handleActivateAll}>
+              Activate All
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? 'Cancel' : '+ Create Device'}
+            </button>
+          </div>
         )}
       </div>
 

@@ -62,7 +62,7 @@ export default function Dashboard() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {locations.map((loc) => (
-            <DeviceMarker key={loc.device_id} location={loc} />
+            <DeviceMarker key={loc.device_id} location={loc} isUnreachable={loc.state === 'unreachable'} />
           ))}
           <FlyToDevice position={flyTo} />
         </MapContainer>

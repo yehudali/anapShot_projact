@@ -7,6 +7,7 @@ export default function useEventStream(eventId) {
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
+  const eventStatusRef = useRef('active');
 
   const connect = useCallback(() => {
     if (!eventId) return;
@@ -30,9 +31,11 @@ export default function useEventStream(eventId) {
       try {
         const data = JSON.parse(e.data);
         setLocations(data.locations || []);
-        setEventStatus(data.status || 'active');
+        const status = data.status || 'active';
+        setEventStatus(status);
+        eventStatusRef.current = status;
 
-        if (data.status === 'closed') {
+        if (status === 'closed') {
           ws.close();
           setConnectionStatus('disconnected');
         }
@@ -49,13 +52,13 @@ export default function useEventStream(eventId) {
       setConnectionStatus('disconnected');
       wsRef.current = null;
       // Auto-reconnect after 3 seconds if event is still active
-      if (eventStatus === 'active') {
+      if (eventStatusRef.current === 'active') {
         reconnectTimer.current = setTimeout(() => {
           connect();
         }, 3000);
       }
     };
-  }, [eventId, eventStatus]);
+  }, [eventId]);
 
   useEffect(() => {
     connect();

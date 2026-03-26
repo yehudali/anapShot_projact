@@ -17,7 +17,7 @@ router = APIRouter()
 
 class DeviceCreate(BaseModel):
     name: str
-    user_id: str
+    user_id: Optional[str] = None
     state: DeviceState = DeviceState.ACTIVE
 
 
@@ -95,6 +95,19 @@ async def delete_device(device_id: str, _=Depends(require_role("admin"))):
 async def get_vapid_public_key():
     """Return the VAPID public key so the device PWA can subscribe to Web Push."""
     return {"status": "success", "data": {"public_key": settings.vapid_public_key or ""}}
+
+
+# --- Device credential validation (used by PWA setup screen) ---
+
+@router.get("/devices/{device_id}/validate", response_model=dict)
+async def validate_device(device_id: str, x_api_key: str = Header(...)):
+    """Validate device_id + API key. Returns 200 on success, 401/404 on failure."""
+    device = await devices_collection.find_one({"_id": _valid_oid(device_id)})
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if device.get("api_key") != x_api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return {"status": "success", "data": {"name": device.get("name", ""), "state": device.get("state", "")}}
 
 
 # --- Push subscription registration ---

@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getDevices, createDevice, updateDevice, deleteDevice } from '../api/devices';
 import { useAuth } from '../context/AuthContext';
+import { formatDate } from '../utils/time';
+
+const STATE_LABELS = { active: 'פעיל', inactive: 'לא פעיל', unreachable: 'לא זמין' };
+const STATE_COLORS = { active: 'green', inactive: 'yellow', unreachable: 'red' };
 
 export default function Devices() {
   const [devices, setDevices] = useState([]);
@@ -15,32 +19,32 @@ export default function Devices() {
   const [copied, setCopied] = useState(null);
   const { isAdmin } = useAuth();
 
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     try {
       const data = await getDevices();
       setDevices(data.data || []);
+      setError('');
     } catch {
-      setError('Failed to load devices');
+      setError('שגיאה בטעינת המכשירים');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDevices();
   }, []);
+
+  useEffect(() => { fetchDevices(); }, [fetchDevices]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (!name.trim()) return;
     setCreating(true);
     setError('');
     try {
-      await createDevice(name, '');
+      await createDevice(name.trim());
       setName('');
       setShowCreate(false);
       await fetchDevices();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create device');
+      setError(err.response?.data?.detail || 'שגיאה ביצירת המכשיר');
     } finally {
       setCreating(false);
     }
@@ -51,13 +55,13 @@ export default function Devices() {
     setError('');
     try {
       const updates = {};
-      if (editName) updates.name = editName;
+      if (editName.trim()) updates.name = editName.trim();
       if (editState) updates.state = editState;
       await updateDevice(editDevice.id, updates);
       setEditDevice(null);
       await fetchDevices();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to update device');
+      setError(err.response?.data?.detail || 'שגיאה בעדכון המכשיר');
     }
   };
 
@@ -69,55 +73,66 @@ export default function Devices() {
       await Promise.all(inactive.map((d) => updateDevice(d.id, { state: 'active' })));
       await fetchDevices();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to activate devices');
+      setError(err.response?.data?.detail || 'שגיאה בהפעלת המכשירים');
     }
   };
 
-  const handleDelete = async (deviceId) => {
-    if (!window.confirm('Are you sure you want to delete this device?')) return;
+  const handleDelete = async (deviceId, deviceName) => {
+    if (!window.confirm(`למחוק את "${deviceName}"?`)) return;
     try {
       await deleteDevice(deviceId);
       await fetchDevices();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to delete device');
+      setError(err.response?.data?.detail || 'שגיאה במחיקת המכשיר');
     }
   };
 
-  const handleCopy = (apiKey) => {
-    navigator.clipboard.writeText(apiKey);
-    setCopied(apiKey);
+  const handleCopy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleCopySetupLink = (device) => {
+    const url = `${window.location.origin}/device-app/?device_id=${device.id}&api_key=${device.api_key}`;
+    navigator.clipboard.writeText(url);
+    setCopied(`link-${device.id}`);
+    setTimeout(() => setCopied(null), 3000);
   };
 
   const openEdit = (device) => {
     setEditDevice(device);
     setEditName(device.name);
-    setEditState(device.state);
+    setEditState(device.state === 'unreachable' ? 'active' : device.state);
   };
 
-  const stateColors = {
-    active: 'green',
-    inactive: 'yellow',
-    unreachable: 'red',
-  };
-
-  const formatDate = (dateStr) => new Date(dateStr).toLocaleString('he-IL');
+  const activeCount = devices.filter((d) => d.state === 'active').length;
+  const hasInactive = devices.some((d) => d.state !== 'active');
 
   if (loading) {
-    return <div className="page-loading">Loading devices...</div>;
+    return <div className="page-loading"><span className="spinner" /> טוען מכשירים...</div>;
   }
 
   return (
     <div className="page">
       <div className="page-header">
-        <h2>Devices</h2>
+        <div>
+          <h2>מכשירים</h2>
+          {devices.length > 0 && (
+            <span className="active-count-label">
+              {activeCount} מתוך {devices.length} פעיל{activeCount !== 1 ? 'ים' : ''}
+            </span>
+          )}
+        </div>
         {isAdmin && (
           <div className="page-header-actions">
-            <button className="btn btn-secondary" onClick={handleActivateAll}>
-              Activate All
-            </button>
+            {hasInactive && (
+              <button className="btn btn-secondary" onClick={handleActivateAll} title="הפעל את כל המכשירים הלא-פעילים">
+                הפעל הכל
+              </button>
+            )}
             <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-              {showCreate ? 'Cancel' : '+ Create Device'}
+              {showCreate ? 'ביטול' : '+ מכשיר חדש'}
             </button>
           </div>
         )}
@@ -127,23 +142,28 @@ export default function Devices() {
 
       {showCreate && (
         <div className="card create-form">
-          <h3>New Device</h3>
+          <h3>מכשיר חדש</h3>
           <form onSubmit={handleCreate}>
             <div className="form-group">
-              <label htmlFor="device-name">Device Name *</label>
+              <label htmlFor="device-name">שם המכשיר *</label>
               <input
                 id="device-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter device name"
+                placeholder="לדוגמה: יחידה 1"
                 required
                 autoFocus
               />
             </div>
-            <button type="submit" className="btn btn-primary" disabled={creating}>
-              {creating ? 'Creating...' : 'Create Device'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn btn-primary" disabled={creating || !name.trim()}>
+                {creating ? <><span className="spinner spinner-sm" /> יוצר...</> : 'צור מכשיר'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCreate(false)}>
+                ביטול
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -151,10 +171,10 @@ export default function Devices() {
       {editDevice && (
         <div className="modal-overlay" onClick={() => setEditDevice(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Device</h3>
+            <h3>עריכת מכשיר</h3>
             <form onSubmit={handleUpdate}>
               <div className="form-group">
-                <label htmlFor="edit-name">Name</label>
+                <label htmlFor="edit-name">שם</label>
                 <input
                   id="edit-name"
                   type="text"
@@ -163,23 +183,21 @@ export default function Devices() {
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="edit-state">State</label>
+                <label htmlFor="edit-state">מצב</label>
                 <select
                   id="edit-state"
                   value={editState}
                   onChange={(e) => setEditState(e.target.value)}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">פעיל</option>
+                  <option value="inactive">לא פעיל</option>
                 </select>
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setEditDevice(null)}>
-                  Cancel
+                  ביטול
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Save
-                </button>
+                <button type="submit" className="btn btn-primary">שמור</button>
               </div>
             </form>
           </div>
@@ -190,27 +208,41 @@ export default function Devices() {
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>State</th>
+              <th>שם</th>
+              <th>מצב</th>
+              <th>Device ID</th>
               <th>API Key</th>
-              <th>Created</th>
-              <th>Last Seen</th>
-              <th>Actions</th>
+              <th>נוצר</th>
+              <th>נראה לאחרונה</th>
+              <th>פעולות</th>
             </tr>
           </thead>
           <tbody>
             {devices.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-row">No devices found</td>
+                <td colSpan={7} className="empty-row">
+                  אין מכשירים — לחץ "+ מכשיר חדש" כדי להוסיף
+                </td>
               </tr>
             ) : (
               devices.map((device) => (
                 <tr key={device.id}>
-                  <td>{device.name}</td>
+                  <td><strong>{device.name}</strong></td>
                   <td>
-                    <span className={`badge badge-${stateColors[device.state] || 'gray'}`}>
-                      {device.state.toUpperCase()}
+                    <span className={`badge badge-${STATE_COLORS[device.state] || 'gray'}`}>
+                      {STATE_LABELS[device.state] || device.state}
                     </span>
+                  </td>
+                  <td>
+                    <span className="api-key">{device.id ? `...${device.id.slice(-8)}` : '—'}</span>
+                    {device.id && (
+                      <button
+                        className="btn btn-sm btn-secondary copy-btn"
+                        onClick={() => handleCopy(device.id, `id-${device.id}`)}
+                      >
+                        {copied === `id-${device.id}` ? '✓' : 'העתק'}
+                      </button>
+                    )}
                   </td>
                   <td>
                     <span className="api-key">
@@ -219,22 +251,29 @@ export default function Devices() {
                     {device.api_key && (
                       <button
                         className="btn btn-sm btn-secondary copy-btn"
-                        onClick={() => handleCopy(device.api_key)}
+                        onClick={() => handleCopy(device.api_key, `key-${device.id}`)}
                       >
-                        {copied === device.api_key ? '✓ Copied' : 'Copy'}
+                        {copied === `key-${device.id}` ? '✓' : 'העתק'}
                       </button>
                     )}
                   </td>
-                  <td>{formatDate(device.created_at)}</td>
-                  <td>{device.last_seen ? formatDate(device.last_seen) : '—'}</td>
+                  <td className="text-muted">{formatDate(device.created_at)}</td>
+                  <td className="text-muted">{device.last_seen ? formatDate(device.last_seen) : '—'}</td>
                   <td className="actions">
                     {isAdmin && (
                       <>
-                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(device)}>
-                          Edit
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => handleCopySetupLink(device)}
+                          title="העתק קישור הגדרה למכשיר"
+                        >
+                          {copied === `link-${device.id}` ? '✓ הועתק' : 'קישור הגדרה'}
                         </button>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(device.id)}>
-                          Delete
+                        <button className="btn btn-sm btn-secondary" onClick={() => openEdit(device)}>
+                          ערוך
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(device.id, device.name)}>
+                          מחק
                         </button>
                       </>
                     )}

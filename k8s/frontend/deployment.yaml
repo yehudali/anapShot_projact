@@ -15,7 +15,7 @@ spec:
       containers:
         - name: frontend
           # Replace with your Docker Hub image after: docker build + docker push
-          image: docker.io/yehudalinker/anashot-frontend:v2
+          image: docker.io/yehudalinker/anashot-frontend:v3
           ports:
             - containerPort: 8080
           env:

@@ -5,6 +5,7 @@ export default function useEventStream(eventId) {
   const [locations, setLocations] = useState([]);
   const [eventStatus, setEventStatus] = useState('active');
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [isLoading, setIsLoading] = useState(true); // true until first message received
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const eventStatusRef = useRef('active');
@@ -34,6 +35,7 @@ export default function useEventStream(eventId) {
         const status = data.status || 'active';
         setEventStatus(status);
         eventStatusRef.current = status;
+        setIsLoading(false);
 
         if (status === 'closed') {
           ws.close();
@@ -51,7 +53,6 @@ export default function useEventStream(eventId) {
     ws.onclose = () => {
       setConnectionStatus('disconnected');
       wsRef.current = null;
-      // Auto-reconnect after 3 seconds if event is still active
       if (eventStatusRef.current === 'active') {
         reconnectTimer.current = setTimeout(() => {
           connect();
@@ -73,5 +74,5 @@ export default function useEventStream(eventId) {
     };
   }, [connect]);
 
-  return { locations, eventStatus, connectionStatus };
+  return { locations, eventStatus, connectionStatus, isLoading };
 }

@@ -1,260 +1,272 @@
-# AnapShot — Backend
+# AnapShot — מודיעין מצבי בזמן אמת
 
-Real-time situational awareness system. When an event is created, the system wakes all active devices via Kafka, collects their live GPS locations, and streams them in real-time to connected clients via WebSocket until the event closes.
+> **דע היכן האנשים שלך נמצאים — ברגע שזה חשוב.**
 
----
+AnapShot היא מערכת קוד פתוח לתודעה מצבית בזמן אמת, המיועדת לפעולות שטח. המערכת מאפשרת למפקדים ולרכזים לעקוב אחר מיקום ה-GPS של כל יחידה פעילה על גבי מפה משותפת — מרגע פתיחת האירוע ועד סיומו.
 
-## Table of Contents
-
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [API Reference](#api-reference)
-- [Authentication](#authentication)
-- [Data Models](#data-models)
-- [Event Lifecycle](#event-lifecycle)
+המערכת תוכננה עבור תרחישים שבהם נראות מיקום מצילה חיים:
+- **פעולות צבאיות** — מעקב אחר כיתות, כלי רכב ולוחמים בשטח
+- **רפואה חירום** — תיאום כונני רפואה ומגיבים ראשונים בזירת האירוע
+- **חיפוש והצלה** — ניטור צוותים בשטח בזמן אמת
 
 ---
 
-## Architecture
+## הבעיה
 
-```
-┌─────────────┐   POST /events   ┌─────────────┐   Kafka: device.wakeup   ┌──────────────┐
-│   Client    │ ───────────────► │   FastAPI   │ ───────────────────────► │   Consumer   │
-│ (frontend)  │                  │  :8000      │                          │  (simulator) │
-│             │ ◄─────────────── │             │ ◄───────────────────────  └──────────────┘
-│  WebSocket  │  live locations  │             │   POST /devices/{id}/location
-└─────────────┘                  └──────┬──────┘
-                                        │
-                          ┌─────────────┼─────────────┐
-                          ▼             ▼             ▼
-                       MongoDB        Redis       Kafka
-                    (persistent)   (live snap)  (wakeup)
-```
+בסיטואציות שטח דינמיות — פעולה קרבית, אירוע רב-נפגעים, משימת חילוץ — המפקד מתמודד עם פער מידע קריטי: **הוא לא יודע היכן האנשים שלו נמצאים.**
 
-**Flow:**
-1. `POST /events` → creates event → publishes to Kafka topic `device.wakeup`
-2. Consumer service listens to Kafka → fetches all ACTIVE devices → simulates GPS reporting
-3. Each device calls `POST /devices/{id}/location` every 5 seconds
-4. Location saved to MongoDB (history) + Redis (live snapshot per event)
-5. `WebSocket /ws/events/{id}` reads Redis every 2 seconds → streams to frontend
-6. `PUT /events/{id}/close` → stops streaming, clears Redis
+פתרונות קיימים הם ציוד קנייני יקר, דיווחי רדיו איטיים, או כלים הדורשים מכשירים ייעודיים. כשהשניות קובעות, הפער הזה עולה בחיים.
 
 ---
 
-## Tech Stack
+## מדוע מבוסס-אירועים — ולא דיווח מיקום רציף?
 
-| Component | Technology |
+**AnapShot מדווח מיקום רק כשנפתח אירוע — ומפסיק מיד עם סיומו.**
+
+זו החלטה תכנונית מכוונת, מתוך שלושה טעמים עיקריים:
+
+### 1. אבטחה מבצעית (חיילים ולוחמים)
+דיווח GPS רציף חושף את מיקום הכוחות לאורך זמן. מיקום שנקלט על-ידי גורם עוין — ולו לרגע — עלול לגרום נזק קשה. בAnapShot, המיקום מועבר **רק כשנפתח אירוע מבצעי מוגדר**, ומיד עם סיומו — הדיווח נפסק לחלוטין.
+
+### 2. פרטיות (אזרחים וכוננים)
+מעקב מיקום קבוע פוגע בפרטיות. המערכת שומרת על עיקרון **צמצום מינימום הנתונים** — המכשיר לא שולח כלום מחוץ לחלון הזמן של האירוע.
+
+### 3. חיסכון בסוללה
+שידור GPS רציף מרוקן סוללה. דיווח מבוסס-אירוע מאפשר לחייל או לכונן להישאר פעיל שעות ארוכות מבלי לדאוג לטעינה.
+
+---
+
+## הפתרון
+
+AnapShot הופך כל סמארטפון למכשיר דיווח GPS. כשנפתח אירוע:
+
+1. **כל המכשירים הרשומים מקבלים התראת Push מיידית**
+2. **כל מכשיר מתחיל לשדר את מיקומו כל 5 שניות**
+3. **לוח הבקרה מציג כל יחידה על מפה חיה**, שמתעדכנת כל 2 שניות
+4. **כשהאירוע נסגר** — הדיווח נפסק, הנתונים נשמרים כהיסטוריה מלאה
+
+ללא ציוד ייעודי. ללא דיווחים ידניים. לחיצה אחת — תמונה מצבית מלאה.
+
+---
+
+## User לעומת Device — מה ההבדל?
+
+שני מושגים מרכזיים במערכת שחשוב להבחין ביניהם:
+
+### User — משתמש מנהל
+אדם שמתחבר לממשק הניהול (לוח הבקרה). יש לו שם משתמש וסיסמה, ותפקיד אחד משלושה:
+
+| תפקיד | גישה |
 |---|---|
-| API Framework | FastAPI (Python 3.11) |
-| Database | MongoDB 6 (Motor async driver) |
-| Cache / Live State | Redis 7 |
-| Message Broker | Apache Kafka (Confluent 7.4) |
-| WebSocket | FastAPI built-in |
-| Auth | JWT (python-jose) + bcrypt (passlib) |
-| Data Models | Pydantic v2 |
-| Container | Docker Compose |
+| `admin` | גישה מלאה — ניהול מכשירים, משתמשים ואירועים |
+| `manager` | צפייה בלבד — מפה חיה והיסטוריית אירועים |
+
+### Device — מכשיר שטח
+הסמארטפון בידי החייל או הכונן. אינו מתחבר עם שם משתמש — הוא מזדהה עם `device_id` ו-`api_key` ייחודיים שנוצרו בעת הרישום. המכשיר **לא רואה את לוח הבקרה** — הוא רק מדווח מיקום.
+
+```
+User (admin/manager) ──► מתחבר ל-Dashboard, פותח אירועים, רואה מפה
+Device               ──► מקבל התראה, מדווח GPS, לא נכנס ל-UI
+```
+
+**לסיכום:** User = מי שמנהל את המערכת. Device = מי שנמצא בשטח.
 
 ---
 
-## Project Structure
+## זרימת אירוע מלאה — מרגע פתיחה ועד סיום
+
+להלן תיאור שלב-אחר-שלב של מחזור חיים מלא של אירוע בודד:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. המפקד (admin) פותח אירוע חדש בלוח הבקרה               │
+│     POST /api/v1/events                                     │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. ה-Backend שולח הודעת wake-up ל-Kafka                   │
+│     Topic: device.wakeup  →  {event_id}                    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. Consumer מאזין ל-Kafka                                  │
+│     מושך את כל המכשירים במצב ACTIVE                       │
+│     שולח Push Notification לכל מכשיר                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  4. כל מכשיר שטח מתעורר                                    │
+│     מתחיל לשלוח מיקום GPS כל 5 שניות                       │
+│     POST /api/v1/devices/{id}/location                     │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. כל דיווח מיקום נשמר בשניים:                            │
+│     • Redis  — snapshot חי לאירוע (נגיש במהירות)          │
+│     • MongoDB — היסטוריה מלאה (לניתוח מאוחר)              │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  6. לוח הבקרה מחובר ב-WebSocket                            │
+│     קורא מ-Redis כל 2 שניות                                │
+│     מציג את כל המכשירים על המפה בזמן אמת                  │
+│     WS /ws/events/{id}?token=<jwt>                         │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  7. Watchdog פועל ברקע (כל 30 שניות)                       │
+│     מכשיר שלא דיווח → מסומן כ-UNREACHABLE                 │
+│     מכשיר שחזר לדווח → מוחזר אוטומטית ל-ACTIVE            │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  8. המפקד סוגר את האירוע                                   │
+│     PUT /api/v1/events/{id}/close                          │
+│     • MongoDB: status = "closed"                           │
+│     • Redis: מפתח האירוע נמחק                              │
+│     • WebSocket: שולח snapshot אחרון ונסגר                 │
+│     • כל המכשירים: מפסיקים לדווח                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## תכונות מרכזיות
+
+| תכונה | תיאור |
+|---|---|
+| **מפה חיה** | כל היחידות הפעילות על מפה, מתעדכנת כל 2 שניות |
+| **התעוררות מיידית** | Push Notification מגיע לכל מכשיר שטח ברגע פתיחת אירוע |
+| **ניטור תקינות מכשיר** | מכשיר שהפסיק לדווח מסומן אוטומטית כ-UNREACHABLE |
+| **שחזור אוטומטי** | מכשיר שחזר לדווח עובר ל-ACTIVE ללא התערבות ידנית |
+| **היסטוריית תנועה** | כל המיקומים נשמרים למסלול מלא לניתוח פוסט-אירוע |
+| **ניהול תפקידים** | Admin מנהל הכל; Manager צופה; Device מדווח בלבד |
+| **אפליקציית שטח (PWA)** | רצה בכל דפדפן סמארטפון — ללא הורדה מה-App Store |
+| **ארכיטקטורה מדרגית** | מבוסס Kafka — מסוגל לטפל במאות מכשירים בו-זמנית |
+
+---
+
+## מדריך התחלה מהירה
+
+### דרישות מוקדמות
+- [Docker](https://www.docker.com/) + Docker Compose
+
+### הפעלה (עם סימולטור מכשירים)
+
+```bash
+git clone <repo>
+cd anapShot_projact
+docker compose --profile dev up --build
+```
+
+הדגל `--profile dev` מפעיל את ה-consumer service, המדמה מכשירי שטח המדווחים GPS. מאפשר דמו מלא ללא מכשירים פיזיים.
+
+### גישה למערכת
+
+| שירות | כתובת |
+|---|---|
+| **לוח הבקרה** | http://localhost:5173 |
+| **API (Swagger)** | http://localhost:8000/docs |
+| **Kafka UI** | http://localhost:8080 |
+
+### הגדרה ראשונית
+
+יצירת משתמש admin (פועל פעם אחת בלבד, כשהמסד ריק):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/bootstrap \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+```
+
+כניסה בכתובת http://localhost:5173 עם `admin` / `admin123`.
+
+### תסריט דמו (5 דקות)
+
+1. **התחברות** כ-admin
+2. עבור ל-**Devices** ← צור מכשיר אחד או יותר במצב `ACTIVE`
+3. עבור ל-**Events** ← צור אירוע חדש
+4. פתח את **Dashboard** של האירוע ← צפה במכשירים על המפה בזמן אמת
+5. **סגור את האירוע** בסיום
+
+---
+
+## הגדרת מכשיר שטח (PWA)
+
+כל סמארטפון יכול לשמש כמכשיר דיווח שטח:
+
+1. Admin יוצר מכשיר בלוח הבקרה ← מקבל `device_id` ו-`api_key`
+2. שיתוף לינק הגדרה עם מפעיל השטח:
+   ```
+   http://<server>/device-app/?device_id=<id>&api_key=<key>
+   ```
+3. המפעיל פותח את הקישור בטלפון ← האפליקציה מתקנפגת אוטומטית
+4. אישור קבלת Push Notifications כשנדרש
+5. המכשיר רשום ויתעורר אוטומטית בפתיחת האירוע הבא
+
+> האפליקציה היא PWA (Progressive Web App) — פועלת בכל דפדפן סמארטפון, ללא התקנה.
+
+---
+
+## מבנה טכני
 
 ```
 anapShot_projact/
-├── app/
-│   ├── main.py               # FastAPI app + router registration
-│   ├── config.py             # Settings (env vars via pydantic-settings)
-│   ├── core/
-│   │   └── auth.py           # JWT utilities + role dependencies
-│   ├── models/
-│   │   ├── user.py           # User model + Role enum
-│   │   ├── device.py         # Device model + DeviceState enum
-│   │   ├── event.py          # Event model + EventStatus enum
-│   │   └── location.py       # Location model
-│   ├── routes/
-│   │   ├── auth.py           # POST /auth/login
-│   │   ├── users.py          # User management
-│   │   ├── devices.py        # Device CRUD + location reporting
-│   │   ├── events.py         # Event CRUD + close
-│   │   ├── locations.py      # GET live locations from Redis
-│   │   └── websocket.py      # WebSocket /ws/events/{id}
-│   └── services/
-│       ├── database.py       # MongoDB + Redis clients
-│       └── kafka_service.py  # Kafka producer (wakeup messages)
-├── consumer/
-│   ├── main.py               # Kafka consumer + device simulator
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── Dockerfile
+├── app/                     # Backend — FastAPI
+│   ├── main.py              # אפליקציה ראשית + רישום routes
+│   ├── config.py            # הגדרות מסביבה (env vars)
+│   ├── core/auth.py         # JWT + הרשאות לפי תפקיד
+│   ├── models/              # מודלי Pydantic v2
+│   ├── routes/              # endpoints: auth, users, devices, events, locations, websocket
+│   └── services/            # MongoDB, Redis, Kafka
+├── consumer/                # Consumer service — Kafka + סימולטור GPS
+├── device-app/              # אפליקציית שטח (PWA)
+├── frontend/                # לוח הבקרה — React + Leaflet
+└── docker-compose.yml
 ```
 
 ---
 
-## Getting Started
+## Stack טכנולוגי
 
-### Prerequisites
-- Docker + Docker Compose
-
-### Run
-
-```bash
-docker compose up --build
-```
-
-Services started:
-| Service | URL |
+| שכבה | טכנולוגיה |
 |---|---|
-| FastAPI (Swagger) | http://localhost:8000/docs |
-| Kafka UI | http://localhost:8080 |
-| MongoDB | localhost:27017 |
-| Redis | localhost:6379 |
-
-### First-Time Setup
-
-**1. Create the first admin user** (only works when no users exist):
-```bash
-curl -X POST http://localhost:8000/api/v1/users/bootstrap \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "yourpassword", "role": "admin"}'
-```
-
-**2. Create the consumer service account** (needed for the device simulator):
-```bash
-curl -X POST http://localhost:8000/api/v1/users \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <admin-token>" \
-  -d '{"username": "consumer-service", "password": "consumer123", "role": "manager"}'
-```
-
-**3. Login to get a token:**
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "yourpassword"}'
-# → {"token": "eyJ..."}
-```
-
-**4. Use the token in all subsequent requests:**
-```bash
-curl http://localhost:8000/api/v1/devices \
-  -H "Authorization: Bearer eyJ..."
-```
+| Backend | FastAPI (Python 3.11) — async |
+| מסד נתונים | MongoDB 6 (Motor async driver) |
+| Cache / מצב חי | Redis 7 |
+| Message Broker | Apache Kafka (Confluent 7.4) |
+| Streaming בזמן אמת | WebSocket (built-in FastAPI) |
+| אימות | JWT (python-jose) + bcrypt (passlib) |
+| ולידציה | Pydantic v2 |
+| Frontend | React + Leaflet maps |
+| אפליקציית שטח | Vanilla PWA (ללא framework) |
+| תשתית | Docker Compose |
 
 ---
 
-## API Reference
+## סטטוס פרויקט
 
-### Auth
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| POST | `/api/v1/auth/login` | Login → JWT token | None |
-| POST | `/api/v1/auth/bootstrap` | Create first admin → returns JWT token | None (locked after first user) |
-| POST | `/api/v1/users/bootstrap` | Create first admin (no token returned) | None (locked after first user) |
-
-### Users
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| POST | `/api/v1/users` | Create user | ADMIN |
-| GET | `/api/v1/users` | List users | ADMIN |
-| GET | `/api/v1/users/{id}` | Get user | ADMIN |
-
-### Devices
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| POST | `/api/v1/devices` | Create device (returns api_key) | ADMIN |
-| GET | `/api/v1/devices` | List devices | ADMIN, MANAGER |
-| GET | `/api/v1/devices/{id}` | Get device | ADMIN, MANAGER |
-| PUT | `/api/v1/devices/{id}` | Update device | ADMIN |
-| DELETE | `/api/v1/devices/{id}` | Delete device | ADMIN |
-| POST | `/api/v1/devices/{id}/location` | Report location | API Key (`X-Api-Key`) |
-
-### Events
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| POST | `/api/v1/events` | Create event (triggers Kafka) | ADMIN |
-| GET | `/api/v1/events` | List events | ADMIN, MANAGER |
-| GET | `/api/v1/events/{id}` | Get event | ADMIN, MANAGER |
-| PUT | `/api/v1/events/{id}/close` | Close event | ADMIN |
-
-### Locations
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| GET | `/api/v1/events/{id}/locations` | Live locations (Redis) | ADMIN, MANAGER |
-| GET | `/api/v1/events/{id}/history` | Full location history (MongoDB, paginated) | ADMIN, MANAGER |
-
-### WebSocket
-| Path | Description | Auth |
-|---|---|---|
-| `ws://host/ws/events/{id}?token=<jwt>` | Stream live locations | ADMIN, MANAGER (JWT query param) |
-
-**WebSocket message format** (every 2 seconds):
-```json
-{
-  "status": "active",
-  "locations": [
-    {
-      "device_id": "...",
-      "latitude": 31.502,
-      "longitude": 34.803,
-      "timestamp": "2026-03-24T21:35:00",
-      "accuracy": 7.5
-    }
-  ]
-}
-```
+- [x] Backend מלא — אירועים, מכשירים, מיקומים, אימות
+- [x] זרימת wake-up דרך Kafka
+- [x] WebSocket streaming בזמן אמת
+- [x] לוח בקרה React עם מפה חיה
+- [x] אפליקציית שטח PWA
+- [x] Push Notifications (Web Push / VAPID)
+- [x] ניטור תקינות מכשירים (Watchdog)
+- [x] שחזור אוטומטי ממצב UNREACHABLE
+- [ ] QR code להתאמת מכשיר מלוח הניהול
+- [ ] תמיכה במספר אירועים מקבילים
+- [ ] לוח בקרה מותאם מובייל
 
 ---
 
-## Authentication
+## רישיון
 
-### JWT (ADMIN / MANAGER)
-1. Login via `POST /auth/login` → receive `token`
-2. Add header: `Authorization: Bearer <token>`
-3. Token expires after 60 minutes
-
-### API Key (DEVICE)
-- Each device gets a unique `api_key` on creation
-- Add header: `X-Api-Key: <api_key>`
-- Used only for `POST /devices/{id}/location`
-
-### Roles
-| Role | Access |
-|---|---|
-| ADMIN | Full access — create/manage everything |
-| MANAGER | Read-only — view devices, events, locations |
-| DEVICE | Location reporting only (via API Key) |
-
----
-
-## Data Models
-
-### Device States
-- `active` — participates in events, receives wake-up
-- `inactive` — excluded from events (manual decision)
-- `unreachable` — active but did not report within timeout
-
-### Event Statuses
-- `active` — ongoing, devices are reporting
-- `closed` — finished, streaming stopped, Redis cleared
-
----
-
-## Event Lifecycle
-
-```
-1. POST /events
-   └─► Kafka: device.wakeup {event_id}
-       └─► Consumer: finds all ACTIVE devices
-           └─► Each device: POST /devices/{id}/location every 5s
-               └─► Redis: live snapshot updated
-                   └─► WebSocket: clients receive update every 2s
-
-2. PUT /events/{id}/close
-   └─► MongoDB: status = "closed"
-   └─► Redis: key deleted
-   └─► WebSocket: sends final snapshot → connection closed
-   └─► Consumer tasks: detect "closed" → stop reporting
-```
+MIT

@@ -6,7 +6,7 @@ settings = Settings()
 
 # MongoDB
 mongo_client = AsyncIOMotorClient(settings.mongo_url)
-database = mongo_client.anapshot
+database = mongo_client.snapshot
 
 # Collections
 users_collection = database.users

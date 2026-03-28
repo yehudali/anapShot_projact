@@ -15,7 +15,7 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <NavLink to="/events">AnapShot</NavLink>
+        <NavLink to="/events">SnapShot</NavLink>
       </div>
       <div className="navbar-links">
         <NavLink to="/events" className={({ isActive }) => isActive ? 'active' : ''}>

@@ -19,7 +19,7 @@ self.addEventListener('push', (e) => {
       clients.forEach(c => c.postMessage({ type: 'EVENT_STARTED', event_id, event_name }))
     );
 
-  const showNotif = self.registration.showNotification('AnapShot — אירוע פעיל', {
+  const showNotif = self.registration.showNotification('SnapShot — אירוע פעיל', {
     body: event_name || 'אירוע חדש נפתח — פתח כדי להתחיל שידור מיקום',
     data: { event_id },
     tag: 'anashot-event',

@@ -33,7 +33,7 @@ export default function Login() {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>AnapShot</h1>
+          <h1>SnapShot</h1>
           <p>Real-time Situational Awareness</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">

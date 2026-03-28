@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title="anapshot-backend", lifespan=lifespan)
+app = FastAPI(title="snapshot-backend", lifespan=lifespan)
 
 app.include_router(events_router, prefix="/api/v1", tags=["events"])
 app.include_router(devices_router, prefix="/api/v1", tags=["devices"])
@@ -37,4 +37,4 @@ app.mount("/device-app", StaticFiles(directory="device-app", html=True), name="d
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "anapshot-backend"}
+    return {"status": "ok", "service": "snapshot-backend"}

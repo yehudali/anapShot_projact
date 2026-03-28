@@ -1,4 +1,4 @@
-# AnapShot Project — Backend
+# SnapShot Project — Backend
 
 ## Project Purpose
 Real-time situational awareness system. When an event is created,

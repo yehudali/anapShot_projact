@@ -12,6 +12,10 @@ async def _check_devices():
     try:
         async for device in devices_collection.find({"state": "active"}):
             device_id = str(device["_id"])
+            # Only mark unreachable if the device has reported at least once.
+            # Devices that were manually set to active but never reported are left alone.
+            if device.get("last_seen") is None:
+                continue
             if not await redis_client.exists(f"device:alive:{device_id}"):
                 await devices_collection.update_one(
                     {"_id": device["_id"]},

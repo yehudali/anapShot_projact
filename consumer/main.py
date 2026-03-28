@@ -15,6 +15,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 CONSUMER_USERNAME = os.getenv("CONSUMER_USERNAME", "")
 CONSUMER_PASSWORD = os.getenv("CONSUMER_PASSWORD", "")
+MONGO_DB = os.getenv("MONGO_DB", "mongodb://localhost:27017/consumer_db")  # For potential future use
 LOCATION_INTERVAL = 5  # seconds between location reports
 
 # Base coordinates (Israel center)

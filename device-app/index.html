@@ -123,6 +123,22 @@
 
     // ── Init ──────────────────────────────────────────────────────────────
     window.addEventListener('load', async () => {
+      const params = new URLSearchParams(location.search);
+
+      // Auto-setup via URL params: ?device_id=...&api_key=...
+      const urlDeviceId = params.get('device_id');
+      const urlApiKey   = params.get('api_key');
+      if (urlDeviceId && urlApiKey) {
+        // Pre-fill and auto-validate
+        document.getElementById('inp-device-id').value = urlDeviceId;
+        document.getElementById('inp-api-key').value   = urlApiKey;
+        showScreen('setup');
+        // Remove params from URL so refresh doesn't re-trigger
+        history.replaceState({}, '', location.pathname);
+        await saveSetup();
+        return;
+      }
+
       deviceId = localStorage.getItem('device_id');
       apiKey   = localStorage.getItem('api_key');
       if (!deviceId || !apiKey) { showScreen('setup'); return; }
@@ -134,23 +150,47 @@
       checkPushStatus();
 
       // Opened via notification click with ?event_id=...
-      const eventId = new URLSearchParams(location.search).get('event_id');
+      const eventId = params.get('event_id');
       if (eventId) startReporting(eventId);
     });
 
     // ── Setup ─────────────────────────────────────────────────────────────
-    function saveSetup() {
+    async function saveSetup() {
       const id  = document.getElementById('inp-device-id').value.trim();
       const key = document.getElementById('inp-api-key').value.trim();
       if (!id || !key) { alert('יש למלא את שני השדות'); return; }
-      localStorage.setItem('device_id', id);
-      localStorage.setItem('api_key', key);
-      location.reload();
+
+      const btn = document.querySelector('#screen-setup button');
+      btn.disabled = true;
+      btn.textContent = 'מאמת...';
+
+      try {
+        const r = await fetch(`${API}/devices/${id}/validate`, {
+          headers: { 'X-Api-Key': key },
+        });
+        if (r.status === 404) { alert('מכשיר לא נמצא — בדוק את ה-Device ID'); return; }
+        if (r.status === 401) { alert('מפתח API שגוי'); return; }
+        if (!r.ok) { alert('שגיאת שרת — נסה שוב'); return; }
+        localStorage.setItem('device_id', id);
+        localStorage.setItem('api_key', key);
+        location.reload();
+      } catch {
+        alert('לא ניתן להגיע לשרת — בדוק חיבור');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'שמור והתחל';
+      }
     }
 
-    function resetSetup() {
+    async function resetSetup() {
       if (!confirm('לאפס את הגדרות המכשיר?')) return;
       stopReporting();
+      // Unregister push subscription from browser before clearing
+      try {
+        const reg = swReg || await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+      } catch { /* ignore */ }
       localStorage.clear();
       location.reload();
     }

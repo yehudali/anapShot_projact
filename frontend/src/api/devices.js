@@ -11,8 +11,8 @@ export async function getDevice(deviceId) {
   return data;
 }
 
-export async function createDevice(name, userId) {
-  const { data } = await client.post('/devices', { name, user_id: userId });
+export async function createDevice(name) {
+  const { data } = await client.post('/devices', { name });
   return data;
 }
 
